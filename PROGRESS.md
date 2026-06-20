@@ -39,8 +39,15 @@
 
 ---
 
+## 2026-06-20 08:05Z (active-work loop)
+
+- Did: v0.1 secp256k1 → Ethereum address done. Pure-Python Keccak-256 in `reliquary/keccak.py` (FIPS-202 with original 0x01 padding), EIP-55 checksum, `ethereum_address()` exposed on `soul_v1.py` and `SoulV1`. Verified against the canonical secp256k1 key=1 vector (`0x7E5F4552...9395Bdf`). 35 tests pass (was 20; +15 new). Commit `13bbfb4`.
+- Next: Either (a) ERC-8004 `IdentityRegistry` registration module — needed before the validation pilot can write to chain, or (b) build a CLI wrapper (`reliquary/cli.py` already exists, may need a `v1` subcommand) so the v0.1 SDK is actually usable from the shell. Pushing (a) since it's on the critical path for the pilot.
+
+---
+
 ## Next 1-3 concrete actions
 
 1. **Push to GitHub** — User decision on cooperation option (PAT / manual / gh auth). Without this, the project remains local-only and the validation pilot cannot launch.
-2. **v0.1 secp256k1 completion** — add `pycryptodome` (or alternative) for Keccak-256 fingerprinting → derive true Ethereum address → run v0.1 tests green.
+2. **v0.1 ERC-8004 registration** — write `reliquary/erc8004.py` (or similar) that takes a `SoulV1` and registers its `ethereum_address` against an `IdentityRegistry` contract. Off-chain stub first (file-based mock), real chain later. This unblocks the validation pilot's "soul publishes its identity" step.
 3. **Validation pilot prep** — finalize the agent-discovery list in `RESEARCH/agent-discovery.md`, prepare per-surface outreach, queue for launch once the GitHub push is done.
