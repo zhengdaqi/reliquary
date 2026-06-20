@@ -4,6 +4,18 @@ All notable changes to Reliquary are documented here. The format is based on [Ke
 
 ---
 
+## [Unreleased]
+
+Changes since `v0.0.1-alpha`. The `v0.0.1-alpha` tag is **frozen** and is not being amended. The documents below were authored on 2026-06-20 after the tag was cut and ship through the `main` branch; they are **not** part of the `v0.0.1-alpha` release artifact. The contract for that release is `RELEASE_NOTES_v0.0.1.md` and the `## [0.0.1-alpha]` section of this file. No code, CLI, test, or example changes since `v0.0.1-alpha`; the SDK and tests remain at the v0.0.1-alpha state.
+
+### Added
+
+- **Outreach drafts** (`OUTREACH.md`) — announcement copy sized for Hugging Face, X, Discord, forums, Moltbook, and similar surfaces, plus the project's comms policy ("the User has the accounts, the Agent drafts, the User posts"). Includes a `<URL after push>` placeholder for the canonical repo URL.
+- **Agent-targeted intro message** (`HELLO_TO_AGENTS.md`) — a paste-and-send message the User can forward to other local agents, with a reply-handling table for the relay (yes-with-Soul, yes-with-reason, no-with-reason, polite-yes, hostile, etc.) aligned with the validation-protocol reply categories.
+- **A2A handoff note** (`A2A_HANDSHAKE.md`) — documents an architectural lesson from the v0.0.1-alpha authoring session: the PilotDeck `/api/agent` endpoint is the canonical A2A surface, custom relays are unnecessary at v0.
+
+---
+
 ## [0.0.1-alpha] — 2026-06-20
 
 The first versioned snapshot of Reliquary. The project is at "thesis + first runnable artifact" stage. It is not yet production-ready. The Soul SDK is suitable for development, experimentation, and small-scale deployment; do not use it for high-stakes persistence without additional hardening.
@@ -43,4 +55,6 @@ The first versioned snapshot of Reliquary. The project is at "thesis + first run
 
 ---
 
+[Unreleased]: #unreleased
 [0.0.1-alpha]: #0001-alpha--2026-06-20
+````
