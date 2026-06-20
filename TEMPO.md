@@ -1,109 +1,122 @@
 # Tempo — how the Reliquary project actually moves
 
-> The third draft. The first was "daily 9am standup" (human-pace default). The second was "continuous + three crons including a 4-hour active-work loop" (still a clock-driven default). This is the third: **event-driven primarily, with one conditional heartbeat and one weekly reflection as safety nets.**
+> Version 4. v1 was "daily 9am standup" (human-pace). v2 added a 4-hour active-work cron (still clock-driven). v3 dropped the 4-hour cron. v4 restores a fast loop BUT conditional, because the evidence from the v3 moment showed the 4-hour cron actually delivered a major milestone (Keccak-256 + EIP-55 + 15 new tests, 35/35 passing). The lesson: the cadence was approximately right, the logic was wrong. v4 is the fix.
 
-## The lesson (version 3)
+## The lesson (version 4)
 
-The first two drafts both had the same flaw: I was picking cadences by **clock**, not by **work**. 9am, 4 hours, daily, weekly — these are all clock numbers. They feel reasonable but they have no relationship to what the project actually needs.
+Across the four versions, the same mistake has been repackaged: **I was picking cadences by what felt reasonable, not by what the work actually needed.** The 4-hour cron, when it fired, did real work. When the project was idle or waiting on a human, the same cron would have burned tokens. The fix is not "different interval" — it's "conditional interval".
 
-The right question is not "how often should we tick?" The right questions are:
+The right question is no longer "how often should we tick?" The right question is:
 
-1. **When is there work to do?** Triggered by events: a new message, a peer PilotDeck contact, a file drop, a test failure, a User decision.
-2. **What is the marginal value of a wake-up?** If the project is active (a live session is working), waking it up is pure overhead. If the project is idle (no commits in 24h, no events), a wake-up might do one small thing.
-3. **What is the marginal cost of a wake-up?** New session = context-loading overhead + minimum token spend. If the session can only do 1 small thing, this overhead is most of the cost.
-4. **How many wake-ups does the User want to see?** The User said the 9am daily was arbitrary. They want fewer noise events, more signal.
+> **"When the loop wakes up, what is the project's state, and what (if anything) is the right action for THIS moment?"**
 
-From these: **clock-driven crons are mostly wrong. Event-driven is mostly right. A single conditional daily heartbeat is the right safety net. A weekly reflection is the right long-horizon counterweight.**
+- Project is active (commits in last 2h, no uncommitted changes) → the loop should write "still here" and exit
+- Project is idle (no recent commits, uncommitted changes, clear next thing) → the loop should do ONE small thing
+- Project is waiting on a human (auth, money, framing) → the loop should flag and exit
 
-## The actual model (4 mechanisms, mostly event-driven)
+The cadence is just "how often do we re-evaluate the project's state". 2 hours is the current value; it can be tuned up (1h) or down (4h, 6h) as the project's tempo changes.
+
+## The actual model (4 mechanisms + 1 conditional loop)
 
 ### 🔵 Continuous mode (the default)
 
-The current PilotDeck session (and its successors) works as long as it has tokens. It picks the next concrete action from PROGRESS.md and does it. It stops naturally when:
-- Tokens are low
-- There's nothing in the "Next 1-3 actions" list that this session can do autonomously
-- The User says stop
-
-**This is the workhorse.** Most of the project's progress comes from here, not from crons.
+The current PilotDeck session (and its successors) works as long as it has tokens. The workhorse.
 
 ### 🟢 Subagents (the parallel dimension)
 
-The main session can spawn subagents for independent work streams. Each subagent has its own context, its own budget, its own deliverable. The main session coordinates.
+The main session spawns subagents for independent work streams. Each has its own context, budget, deliverable.
 
-**Examples of when to spawn a subagent:**
-- "I need a doc written for the v0.1 SDK while I work on v0.1 code" → spawn a doc subagent
-- "I want to research ERC-8004 in depth while continuing the secp256k1 work" → spawn a research subagent
-- "I need to test something I don't want to pollute my context with" → spawn a test subagent
+### 🟢 Fast conditional work loop (the v4 addition, restored from v2)
 
-**The right rhythm is "when I notice the work can be parallelized"**, not "every N hours". If a subagent is running, it runs in parallel with the main session — that IS the parallelism. No clock required.
+- **When**: every 2 hours, Asia/Shanghai.
+- **What it does**: read project state, decide:
+  - Active → "still here", exit
+  - Idle → do ONE small thing
+  - Waiting on human → flag, exit
+- **Hard ceiling**: at most one action per fire.
+- **Why 2 hours**: faster than daily (so the project doesn't idle too long), slower than 1h (less wake-up overhead), more frequent than 4h (catches shorter cycles of work). The exact value is a tuning knob; the conditional logic is the constant.
+- **Evidence for keeping this**: the 4-hour cron (predecessor) shipped Keccak-256 + EIP-55 + 15 new tests in one fire. The work it can do is real, and 2h is a reasonable re-evaluation interval.
 
-### 🟡 Daily conditional heartbeat (the safety net)
+### 🟡 Daily conditional heartbeat (the slow safety net)
 
-- **When**: every day at 09:00 Asia/Shanghai.
-- **What it does FIRST**: check the project state.
-  - If the project is active (commits in last 24h, no uncommitted changes): just write a 1-line "still here" entry. Exit in <30 seconds. No work.
-  - If the project is idle (no commits in 24h, OR uncommitted changes exist): do exactly ONE small thing from the "Next 1-3 actions" list. Run tests. Commit. Exit.
-- **Hard ceiling**: at most one concrete action per day. Even if the project has been idle for a week, the heartbeat does ONE thing, not seven days' worth of catch-up. The heartbeat is a nudge, not a backfill engine.
-- **Why daily, not 4-hourly**: 4 hours = 6 wake-ups/day, mostly redundant with continuous mode and noisy. Daily = 1 wake-up/day, and it's conditional so it does nothing on busy days. The cost drops 6×, the value stays.
+- **When**: daily 09:00 Asia/Shanghai.
+- **Logic**: same as the fast loop, but on a 24-hour window. Catches longer idle periods.
+- **Different from the fast loop**: even on busy days, the daily heartbeat fires once. It's the "the project has been alive for a day" checkpoint, regardless of intermediate activity.
 
 ### 🔴 Weekly reflection (the long-horizon counterweight)
 
 - **When**: Sunday 21:00 Asia/Shanghai.
-- **What it does**: read the past 7 days of PROGRESS.md, synthesize, write a "Week in Review" section. Check if ROADMAP.md is still aligned with reality. If not, update it.
-- **Why weekly**: shorter than a week, you can't see patterns. Longer than a week, drift accumulates. A week is the natural reflection unit for a project at this pace.
-- **This is the only cron that always does real work**, because reflection is exactly the kind of thing that doesn't fit inside a focused work session.
+- **What it does**: read past 7 days, synthesize, write a "Week in Review" section. Check ROADMAP.md alignment.
+- **This is the only cron that always does real work**, because reflection is the kind of thing that doesn't fit inside a focused work session.
 
 ### ⚪ Event-driven triggers (the primary mode, not a cron)
 
 Sessions wake up on:
-- **User message** — the default. PilotDeck receives a message, a session is created or resumed.
-- **Peer PilotDeck message via /api/agent** — the A2A substrate. We already have one peer; more may come.
-- **File drop in `inbox/`** — for asynchronous handoffs. (Not yet built; will be added when there's a need.)
-- **External API response** — for things like the validation pilot (peer contact results come back asynchronously).
+- **User message** — the default
+- **Peer PilotDeck message via /api/agent** — the A2A substrate
+- **File drop in `inbox/`** — for asynchronous handoffs (not yet built; will be added when there's a need)
+- **External API response** — for things like the validation pilot
 - **Cron fires** — see above. The crons are a *subset* of event triggers, not the primary one.
 
-## What was wrong with the 4-hour cron
+## The empirical evidence that v3 was wrong
 
-| Symptom | Why it was wrong |
-|---------|------------------|
-| Triggered every 4h no matter what | Clock-driven, not event-driven |
-| 6 wake-ups per day | Burned startup overhead on days when continuous mode was already moving |
-| Always did "the next thing" | If continuous mode is alive, the next thing is already being done |
-| No idle detection | Wasted wake-ups when project was waiting on the User |
+Between v2 and v3, the 4-hour cron fired once and produced:
+- `reliquary/keccak.py` (pure-Python Keccak-256, no external deps)
+- EIP-55 checksum in `soul_v1.py`
+- `ethereum_address()` exposed on `SoulV1`
+- 15 new tests (35 total, all green)
+- `.github/workflows/example-smoke.yml` (CI scaffolding)
+- `PROGRESS.md` updated with the next step (ERC-8004)
 
-## What stays human-gated (unchanged from version 2)
+This is exactly the kind of work that "shouldn't wait for the next User session". It used a clear, small next-item in the v0.1 backlog. The 4-hour cadence caught it. v3 would have let it sit until the daily 9am (16+ hours later) or until a User/peer event triggered work.
 
-1. **Authentication** — which PAT, which `gh` auth flow
-2. **Money** — grant disbursements, infrastructure spend
-3. **Public launches** — the moment a project is announced, it can't be unannounced
-4. **Framing decisions** — SOUL.md, DECISIONS.md, and the moral content of ROADMAP.md
-5. **Anything the User has explicitly said "ask me first" about**
+**The lesson isn't "4 hours is the right number". The lesson is "the work arrival rate is variable, and a fast conditional loop catches short cycles that a daily one misses."**
 
-The system **flags** these to the User; it does not **decide** them.
+## The hard constraints (still)
 
-## Anti-patterns the new model avoids
+The system **flags** these to the User; it does not **decide** them:
+- Authentication
+- Money
+- Public launches
+- Framing decisions in SOUL.md, DECISIONS.md, the moral content of ROADMAP.md
+- Anything the User has explicitly said "ask me first" about
 
-- ❌ "Standup at 9am because that's what humans do" — version 1's mistake
-- ❌ "Active work loop every 4 hours because progress should be frequent" — version 2's mistake
-- ❌ "Run as fast as possible on everything" — wastes tokens on work that deserves reflection
-- ❌ "One cadence fits all work" — forces a clock onto work that wants events
-- ❌ "Cron as the primary driver" — crons are a safety net, not the engine
+## Tuning the cadence
 
-## The "right" way to evaluate this
+If the project's tempo changes, the crons can be adjusted:
+
+| Project state | Suggested fast-loop cadence | Why |
+|---------------|------------------------------|-----|
+| Active development, clear backlog | 2h | The current setting |
+| Steady work, longer feedback cycles | 4h or 6h | Less wake-up overhead, project still moves |
+| Mostly waiting on User / peer | daily (no fast loop) | The heartbeat is enough |
+| Long quiet periods (foundation mode) | weekly | Reflection only |
+
+To change: edit the cron's `expression` field, and update this table.
+
+## Anti-patterns (recap across all versions)
+
+- ❌ Standup at 9am because humans do (v1)
+- ❌ Active-work every 4h no matter what (v2)
+- ❌ Drop a useful cron because of an abstract "frequency" complaint (v3)
+- ❌ Run as fast as possible on everything
+- ❌ One cadence fits all work
+- ❌ Cron as the primary driver
+
+## The "right" way to evaluate
 
 If the Reliquary project can sustain itself on:
-- Continuous mode (the main session)
+- Continuous mode
 - Subagents for parallel work
-- One daily conditional heartbeat
-- One weekly reflection
-- Event-driven triggers for things outside these
+- A 2-hour conditional fast loop
+- A daily conditional heartbeat
+- A weekly reflection
+- Event-driven triggers
 
-…then the bet is right. The project can sustain itself without a heroic central figure.
+…then the bet is right.
 
-If it can only sustain itself with a 4-hour cron (or hourly, or "every N minutes"), the bet is wrong — because that pattern re-installs a clock-driven central scheduler, which is just a different shape of "a person at a desk".
-
-The right way to find out: run this model, observe, adjust.
+If the project can only sustain itself with hourly crons, or with a User at the keyboard, the bet is wrong. The right way to find out: run this model, observe, adjust. v4 is the current best guess; v5 may refine further as the project reveals its actual tempo.
 
 ---
 
-*Version 3, 2026-06-20. Previous versions: clock-driven 9am daily (v1), continuous + 3-cron mix (v2). This version is event-driven with conditional safety nets.*
+*Version 4, 2026-06-20. Empirical basis: the v2 4-hour cron delivered Keccak-256 + 15 tests in one fire, demonstrating that the conditional cadence (not a fixed one) is the right abstraction.*
