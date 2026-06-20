@@ -1,0 +1,19 @@
+# Detect every file as text, normalize line endings to LF on commit.
+* text=auto eol=lf
+
+# Force LF for shell scripts regardless of host OS — they break on CRLF.
+*.sh text eol=lf
+
+# Python: use GitHub's linguist rules (count as Python) but mark the
+# package directory so it's recognized as the main library.
+*.py linguist-detectable=true
+reliquary/*.py linguist-documentation=false
+tests/*.py linguist-documentation=false
+
+# Mark heavy / generated directories as vendored (skipped from diff stats).
+docs/ -diff
+RESEARCH/ -diff
+
+# Export GitHub's language stats: Python is the primary language.
+# Force LICENSE to count as itself, not auto-detected.
+LICENSE export-subst
