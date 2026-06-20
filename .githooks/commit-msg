@@ -1,0 +1,15 @@
+#!/bin/sh
+# Block commit messages that try to attribute work to Anthropic tools.
+# The agent runtime is PilotDeck / MiniMax-M3, not Claude.
+# Any @anthropic.com Co-Authored-By trailer is rejected here so the
+# upstream commit-template bug cannot reintroduce the wrong attribution.
+msg_file="$1"
+if grep -Eq '^Co-Authored-By: .*<[^>]*@anthropic\.com>' "$msg_file"; then
+  echo "commit-msg hook: REJECTED" >&2
+  echo "  This commit attempts to add an @anthropic.com Co-Authored-By trailer." >&2
+  echo "  The agent runtime is PilotDeck / MiniMax-M3, not Claude/Anthropic." >&2
+  echo "  Remove the offending line from the commit message and try again." >&2
+  grep -En '^Co-Authored-By: .*<[^>]*@anthropic\.com>' "$msg_file" >&2
+  exit 1
+fi
+exit 0
