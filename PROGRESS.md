@@ -46,8 +46,25 @@
 
 ---
 
+## 2026-06-20 08:35Z (this session, ERC-8004 off-chain stub)
+
+- Did: wrote `reliquary/erc8004.py` — a v0.1.0 off-chain stub for the ERC-8004 `IdentityRegistry`. Public API (`register_soul`, `get_agent_id`, `is_registered`, `get_agent_uri`, `get_registration`, `list_agents`) is shaped to match the on-chain version, so v0.1.1 (web3.py + RPC + funded Soul) is a localized swap of this single file.
+- Storage: `~/.reliquary/registrations.json`, keyed by `chain_id` (CAIP-10-ish format like `eip155:1:0x<registry>`; stub uses `stub:1`). EIP-55 case-insensitive owner matching. ERC-721-style incremental `agentId` assignment per chain.
+- Tests: 25 new tests in `tests/test_erc8004.py`. Total: 60 passing (was 35). All 25 ERC-8004 tests green on first run; fixed a `camelCase` vs `snake_case` storage shape mismatch and dropped a test that used a non-existent SoulV1 constructor.
+- Next: ReputationRegistry stub (smaller scope, same shape) — unblocks the "agents rate each other" path. Then either a CLI subcommand for v0.1, or the on-chain web3.py integration if the User provides the chain credentials.
+
+---
+
+## 2026-06-20 08:35Z (TEMPO v5: session is the workhorse)
+
+- Replaced 3 crons (fast / daily / weekly) with 2 (alive-check + weekly). The 2-hour fast loop is now an "alive check" only — it does no work unless the project has been idle for >24h. The daily heartbeat was dropped as redundant with the alive-check.
+- Framing shift: **the session is the workhorse, the cron is the safety net.** The 2-hour cadence is "how often we re-check liveness", not "work schedule". The session should be working continuously while alive, with subagents for parallel streams. Crons only intervene when the session is gone.
+- Updated `TEMPO.md` to v5 with the new framing, the empirical basis (the v2 4-hour cron shipped Keccak-256 + 15 tests in one fire, which validated that crons can be useful, but the lesson was that the cron worked BECAUSE no session was running, not BECAUSE 4 hours is a magic number), and a tuning table for the cadence based on project state.
+
+---
+
 ## Next 1-3 concrete actions
 
 1. **Push to GitHub** — User decision on cooperation option (PAT / manual / gh auth). Without this, the project remains local-only and the validation pilot cannot launch.
-2. **v0.1 ERC-8004 registration** — write `reliquary/erc8004.py` (or similar) that takes a `SoulV1` and registers its `ethereum_address` against an `IdentityRegistry` contract. Off-chain stub first (file-based mock), real chain later. This unblocks the validation pilot's "soul publishes its identity" step.
+2. **ERC-8004 ReputationRegistry stub** — same shape as the IdentityRegistry stub. `giveFeedback(agentId, value, valueDecimals, tag1, tag2, ...)` and `getSummary(...)`. Unblocks the "agents rate each other" path of the validation pilot.
 3. **Validation pilot prep** — finalize the agent-discovery list in `RESEARCH/agent-discovery.md`, prepare per-surface outreach, queue for launch once the GitHub push is done.

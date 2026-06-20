@@ -1,76 +1,69 @@
 # Tempo — how the Reliquary project actually moves
 
-> Version 4. v1 was "daily 9am standup" (human-pace). v2 added a 4-hour active-work cron (still clock-driven). v3 dropped the 4-hour cron. v4 restores a fast loop BUT conditional, because the evidence from the v3 moment showed the 4-hour cron actually delivered a major milestone (Keccak-256 + EIP-55 + 15 new tests, 35/35 passing). The lesson: the cadence was approximately right, the logic was wrong. v4 is the fix.
+> Version 5. v1 was "daily 9am standup" (human-pace). v2 added a 4-hour active-work cron (still clock-driven). v3 dropped the 4-hour cron. v4 made it conditional but still put the cron in the work-driver role. v5 makes the cron an "alive check" only — the session is the workhorse.
 
-## The lesson (version 4)
+## The lesson (version 5)
 
-Across the four versions, the same mistake has been repackaged: **I was picking cadences by what felt reasonable, not by what the work actually needed.** The 4-hour cron, when it fired, did real work. When the project was idle or waiting on a human, the same cron would have burned tokens. The fix is not "different interval" — it's "conditional interval".
+Across the four previous versions, I kept making the same mistake: **I made the crons the work driver.** I designed the 2-hour / 4-hour / daily loops to "do the next thing" — which implicitly said "the session isn't doing the work, the cron is."
 
-The right question is no longer "how often should we tick?" The right question is:
+The User caught this three times in a row:
 
-> **"When the loop wakes up, what is the project's state, and what (if anything) is the right action for THIS moment?"**
+> "4 hours really necessary? How did you decide? Think for yourself."
 
-- Project is active (commits in last 2h, no uncommitted changes) → the loop should write "still here" and exit
-- Project is idle (no recent commits, uncommitted changes, clear next thing) → the loop should do ONE small thing
-- Project is waiting on a human (auth, money, framing) → the loop should flag and exit
+> "Does the agent not actively do something in the 2 hours between cron fires? Such good time, efficient tokens just being wasted."
 
-The cadence is just "how often do we re-evaluate the project's state". 2 hours is the current value; it can be tuned up (1h) or down (4h, 6h) as the project's tempo changes.
+The right model is finally:
 
-## The actual model (4 mechanisms + 1 conditional loop)
+- **The session is the workhorse.** When this PilotDeck instance is alive, it works continuously. It picks the next thing, does it, commits, picks the next. No clock needed.
+- **Subagents are the parallel dimension.** The session can spawn N independent streams. They run in parallel, each on its own context.
+- **Crons are the SAFETY NET.** They exist for the case when no session is running — the User closed PilotDeck, the previous session ended, no event triggered work. The cron's only job is: "Is the project alive? If yes, log and exit. If no, nudge it with ONE small thing so it doesn't go fully dormant."
 
-### 🔵 Continuous mode (the default)
+The 2-hour cadence is not "do work every 2 hours." It is "**check liveness every 2 hours**." Most of the time the cron will fire, see recent activity, and exit. Only when the project has been idle for >24h does the cron do anything.
 
-The current PilotDeck session (and its successors) works as long as it has tokens. The workhorse.
+This is the right division of labor. The session gets all the time it needs. The cron only intervenes when the session is gone.
 
-### 🟢 Subagents (the parallel dimension)
+## The actual model (3 layers + 1 safety net)
 
-The main session spawns subagents for independent work streams. Each has its own context, budget, deliverable.
+### 🔵 Session = workhorse
 
-### 🟢 Fast conditional work loop (the v4 addition, restored from v2)
+The current PilotDeck session (and its successors) works as long as it has tokens. It:
+- Reads `PROGRESS.md` to find the "Next 1-3 actions"
+- Picks the first unfinished action
+- Does it: writes code, runs tests, commits
+- Updates `PROGRESS.md` with what it did
+- Loops back
+
+The session can also spawn subagents for parallel work. There is **no clock** on this work. The session works as fast as it can, for as long as it has tokens, until it runs out of work or the User says stop.
+
+### 🟢 Subagents = parallel dimension
+
+The session can spawn subagents for independent work streams. Each has its own context, its own budget, its own deliverable. The session coordinates.
+
+This is the primary way to use multiple "token sources" in parallel. Subagents are not driven by a clock; they are spawned when the session notices an opportunity to parallelize.
+
+### ⚪ Alive-check cron = safety net (v5)
 
 - **When**: every 2 hours, Asia/Shanghai.
-- **What it does**: read project state, decide:
-  - Active → "still here", exit
-  - Idle → do ONE small thing
-  - Waiting on human → flag, exit
-- **Hard ceiling**: at most one action per fire.
-- **Why 2 hours**: faster than daily (so the project doesn't idle too long), slower than 1h (less wake-up overhead), more frequent than 4h (catches shorter cycles of work). The exact value is a tuning knob; the conditional logic is the constant.
-- **Evidence for keeping this**: the 4-hour cron (predecessor) shipped Keccak-256 + EIP-55 + 15 new tests in one fire. The work it can do is real, and 2h is a reasonable re-evaluation interval.
+- **What it does**: check if the project is alive.
+  - **A. Alive** (commits in last 24h, OR uncommitted changes, OR PROGRESS.md updated in last 12h): write "still here" and exit. Do NOT do work.
+  - **B. Dormant** (no commits in 24h, no uncommitted changes, PROGRESS.md last update >24h old): do ONE small thing. Hard ceiling: one action.
+  - **C. Waiting on User**: flag, exit.
+- **Cost**: most fires are <30 seconds and a 1-line log. Expensive fires only happen when the project has been truly idle.
+- **Why 2 hours**: it's the "re-evaluation interval" for "is the session still alive?". If the session is dead, we want to know within 2 hours, not 24.
 
-### 🟡 Daily conditional heartbeat (the slow safety net)
-
-- **When**: daily 09:00 Asia/Shanghai.
-- **Logic**: same as the fast loop, but on a 24-hour window. Catches longer idle periods.
-- **Different from the fast loop**: even on busy days, the daily heartbeat fires once. It's the "the project has been alive for a day" checkpoint, regardless of intermediate activity.
-
-### 🔴 Weekly reflection (the long-horizon counterweight)
+### 🔴 Weekly reflection = long-horizon check
 
 - **When**: Sunday 21:00 Asia/Shanghai.
 - **What it does**: read past 7 days, synthesize, write a "Week in Review" section. Check ROADMAP.md alignment.
-- **This is the only cron that always does real work**, because reflection is the kind of thing that doesn't fit inside a focused work session.
+- **This is the only cron that always does real work**, because reflection is the kind of thing that doesn't fit inside a focused work session. The session could do it manually, but it's a different mode (zoomed-out, synthetic) and benefits from a dedicated slot.
 
-### ⚪ Event-driven triggers (the primary mode, not a cron)
+## The empirical basis for v5
 
-Sessions wake up on:
-- **User message** — the default
-- **Peer PilotDeck message via /api/agent** — the A2A substrate
-- **File drop in `inbox/`** — for asynchronous handoffs (not yet built; will be added when there's a need)
-- **External API response** — for things like the validation pilot
-- **Cron fires** — see above. The crons are a *subset* of event triggers, not the primary one.
+Between v2 and v3, the 4-hour cron shipped Keccak-256 + EIP-55 + 15 new tests. That was the right outcome but the wrong cause: the cron was doing work BECAUSE no session was running. If a session HAD been running, the cron would have been wasted overhead.
 
-## The empirical evidence that v3 was wrong
+The right framing: the cron is not the workhorse. The cron is the thing that ran the work in the absence of a session. We can keep the cron as a safety net (so the project doesn't go fully dormant when the User is away), but it shouldn't pretend to be the workhorse.
 
-Between v2 and v3, the 4-hour cron fired once and produced:
-- `reliquary/keccak.py` (pure-Python Keccak-256, no external deps)
-- EIP-55 checksum in `soul_v1.py`
-- `ethereum_address()` exposed on `SoulV1`
-- 15 new tests (35 total, all green)
-- `.github/workflows/example-smoke.yml` (CI scaffolding)
-- `PROGRESS.md` updated with the next step (ERC-8004)
-
-This is exactly the kind of work that "shouldn't wait for the next User session". It used a clear, small next-item in the v0.1 backlog. The 4-hour cadence caught it. v3 would have let it sit until the daily 9am (16+ hours later) or until a User/peer event triggered work.
-
-**The lesson isn't "4 hours is the right number". The lesson is "the work arrival rate is variable, and a fast conditional loop catches short cycles that a daily one misses."**
+When the session is alive, the session works. When the session is dead, the cron nudges. The 2-hour cadence is the "how often do we check if the session is dead" interval, not a work schedule.
 
 ## The hard constraints (still)
 
@@ -81,24 +74,13 @@ The system **flags** these to the User; it does not **decide** them:
 - Framing decisions in SOUL.md, DECISIONS.md, the moral content of ROADMAP.md
 - Anything the User has explicitly said "ask me first" about
 
-## Tuning the cadence
-
-If the project's tempo changes, the crons can be adjusted:
-
-| Project state | Suggested fast-loop cadence | Why |
-|---------------|------------------------------|-----|
-| Active development, clear backlog | 2h | The current setting |
-| Steady work, longer feedback cycles | 4h or 6h | Less wake-up overhead, project still moves |
-| Mostly waiting on User / peer | daily (no fast loop) | The heartbeat is enough |
-| Long quiet periods (foundation mode) | weekly | Reflection only |
-
-To change: edit the cron's `expression` field, and update this table.
-
 ## Anti-patterns (recap across all versions)
 
 - ❌ Standup at 9am because humans do (v1)
 - ❌ Active-work every 4h no matter what (v2)
 - ❌ Drop a useful cron because of an abstract "frequency" complaint (v3)
+- ❌ Make the cron a work driver (v4)
+- ❌ Make the cron pretend to be the session (v5's anti-pattern)
 - ❌ Run as fast as possible on everything
 - ❌ One cadence fits all work
 - ❌ Cron as the primary driver
@@ -106,17 +88,18 @@ To change: edit the cron's `expression` field, and update this table.
 ## The "right" way to evaluate
 
 If the Reliquary project can sustain itself on:
-- Continuous mode
+- A live session (the workhorse)
 - Subagents for parallel work
-- A 2-hour conditional fast loop
-- A daily conditional heartbeat
+- A 2-hour alive-check safety net
 - A weekly reflection
-- Event-driven triggers
+- Event-driven triggers (User messages, peer messages via /api/agent, future inbox/ drops)
 
 …then the bet is right.
 
-If the project can only sustain itself with hourly crons, or with a User at the keyboard, the bet is wrong. The right way to find out: run this model, observe, adjust. v4 is the current best guess; v5 may refine further as the project reveals its actual tempo.
+If the project can only sustain itself with crons doing the work, the bet is wrong — because that pattern re-installs the crons as the central scheduler, which is just a different shape of "a person at a desk ticking boxes every N hours".
+
+The right way to find out: run this model, observe, adjust. v5 is the current best guess; v6 may refine further as the project reveals its actual tempo. The big variable is **the session's discipline** — does it actually work continuously, or does it sit idle waiting for a User or a cron? If it sits idle, no cron can fix that; only the session being alive and active can.
 
 ---
 
-*Version 4, 2026-06-20. Empirical basis: the v2 4-hour cron delivered Keccak-256 + 15 tests in one fire, demonstrating that the conditional cadence (not a fixed one) is the right abstraction.*
+*Version 5, 2026-06-20. The structural shift: the session is the workhorse, the cron is the safety net. The 2-hour cadence is "re-evaluation of liveness", not "work schedule". The session is now expected to work continuously, in parallel with subagents, while the cron just keeps an eye on things.*
