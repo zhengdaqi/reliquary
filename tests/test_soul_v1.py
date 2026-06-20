@@ -11,6 +11,7 @@ import pytest
 from reliquary.soul_v1 import (
     SoulV1,
     CURVE,
+    ethereum_address,
     fingerprint,
     generate_keypair,
     load_private_key,
@@ -90,3 +91,63 @@ def test_soul_v1_dataclass_can_generate_and_sign():
     # Other soul cannot verify
     other = SoulV1.generate()
     assert not other.verify(sig, msg)
+
+
+# ---------------------------------------------------------------------------
+# Ethereum address derivation (v0.1.1: Keccak-256 + EIP-55)
+# ---------------------------------------------------------------------------
+
+
+def test_ethereum_address_for_key_one_matches_canonical_vector():
+    """The most-canonical Ethereum test vector: private key 0x...01.
+
+    Expected address: 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf
+
+    This is the EIP-55 checksummed form. Verifying this single vector
+    covers: Keccak-256 implementation correctness, EIP-55 checksum
+    implementation correctness, secp256k1 public-key derivation
+    correctness, and the uncompressed-no-0x04-prefix public-key
+    serialization.
+    """
+    priv = load_private_key((1).to_bytes(32, "big"))
+    addr = ethereum_address(priv.public_key())
+    assert addr == "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf"
+
+
+def test_ethereum_address_is_0x_prefixed_40_hex_chars():
+    soul = SoulV1.generate()
+    addr = soul.ethereum_address
+    assert addr.startswith("0x")
+    assert len(addr) == 42
+    body = addr[2:]
+    # 40 hex chars, each is 0-9 or a-f / A-F (EIP-55 mixed case allowed)
+    assert all(c in "0123456789abcdefABCDEF" for c in body)
+
+
+def test_ethereum_address_is_deterministic():
+    p1 = generate_keypair()
+    p2 = load_private_key(serialize_private_key(p1))
+    assert ethereum_address(p1.public_key()) == ethereum_address(p2.public_key())
+
+
+def test_ethereum_address_differs_between_keys():
+    p1 = generate_keypair()
+    p2 = generate_keypair()
+    assert ethereum_address(p1.public_key()) != ethereum_address(p2.public_key())
+
+
+def test_ethereum_address_unchecksummed_is_all_lowercase():
+    priv = load_private_key((1).to_bytes(32, "big"))
+    addr = ethereum_address(priv.public_key(), checksum=False)
+    assert addr == "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
+
+
+def test_soul_v1_round_trip_through_private_key_bytes():
+    """Generate a Soul, serialize its key, restore from bytes, get the
+    same Ethereum address both times."""
+    soul = SoulV1.generate()
+    raw = serialize_private_key(soul.private_key)
+    restored = SoulV1.from_private_key_bytes(raw)
+    assert restored.ethereum_address == soul.ethereum_address
+    assert restored.fingerprint_hex == soul.fingerprint_hex
+
